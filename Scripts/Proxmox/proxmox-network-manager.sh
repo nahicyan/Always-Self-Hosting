@@ -141,7 +141,7 @@ try:
     net = ipaddress.ip_network('$network', strict=False)
     ip = ipaddress.ip_address('$ip')
     sys.exit(0 if ip in net else 1)
-except Exception:
+except:
     sys.exit(1)
 " 2>/dev/null
 }
@@ -154,7 +154,7 @@ import ipaddress, sys
 try:
     ipaddress.ip_interface('$ip_cidr')
     sys.exit(0)
-except Exception:
+except:
     sys.exit(1)
 " 2>/dev/null
 }
@@ -167,7 +167,7 @@ import ipaddress, sys
 try:
     ipaddress.ip_address('$ip')
     sys.exit(0)
-except Exception:
+except:
     sys.exit(1)
 " 2>/dev/null
 }
@@ -202,7 +202,8 @@ has_nat_configured() {
     local br_net=$(get_bridge_network "$br")
     
     if [[ -n "$br_net" ]]; then
-        iptables -w -t nat -S POSTROUTING 2>/dev/null | grep -q "MASQUERADE.*-s ${br_net%/*}" && return 0
+        # grep for full CIDR (e.g., 192.168.1.0/24)
+        iptables -w -t nat -S POSTROUTING 2>/dev/null | grep -q "MASQUERADE.*-s ${br_net}" && return 0
     fi
     return 1
 }
@@ -530,24 +531,24 @@ setup_private_network() {
     # Backup
     backup_configs
     
-    # Ensure interfaces.d is included
-    if ! grep -q "source.*interfaces.d" "$INTERFACES_FILE" 2>/dev/null; then
-        log_step "Enabling interfaces.d includes..."
-        echo "" >> "$INTERFACES_FILE"
-        echo "source /etc/network/interfaces.d/*" >> "$INTERFACES_FILE"
-    fi
-    mkdir -p "$INTERFACES_DIR"
-    
     # Enable IP forwarding
     log_step "Enabling IP forwarding..."
     sysctl -w net.ipv4.ip_forward=1 > /dev/null
     echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-ipforward.conf
     
-    # Write bridge config to interfaces.d (NO iptables rules here)
-    log_step "Writing bridge config to $INTERFACES_DIR/$bridge_name.cfg..."
-    cat > "$INTERFACES_DIR/$bridge_name.cfg" << EOF
+    # Check if bridge already defined in interfaces file
+    if grep -q "^iface $bridge_name " "$INTERFACES_FILE" 2>/dev/null; then
+        log_warn "Bridge $bridge_name already in $INTERFACES_FILE - updating..."
+        # Remove existing bridge config block (from auto/iface line to next blank line or auto/iface)
+        sed -i "/^auto $bridge_name/,/^$/d" "$INTERFACES_FILE" 2>/dev/null || true
+        sed -i "/^iface $bridge_name /,/^$/d" "$INTERFACES_FILE" 2>/dev/null || true
+    fi
+    
+    # Write bridge config directly to main interfaces file (Proxmox GUI reads this)
+    log_step "Adding bridge config to $INTERFACES_FILE..."
+    cat >> "$INTERFACES_FILE" << EOF
+
 # Private bridge $bridge_name - managed by proxmox-network-manager.sh
-# Network: $network
 auto $bridge_name
 iface $bridge_name inet static
         address $bridge_ip
@@ -591,7 +592,7 @@ EOF
     echo "  DNS: 1.1.1.1 (or your preference)"
     echo ""
     echo "Note: NAT/FORWARD rules are auto-detected by the hardening script."
-    echo "      Bridge config is persisted in $INTERFACES_DIR/$bridge_name.cfg"
+    echo "      Bridge config is in $INTERFACES_FILE (visible in Proxmox GUI)"
 }
 
 # =============================================================================

@@ -853,8 +853,11 @@ interactive_setup() {
                 log_step "Disabling Proxmox firewall..."
                 systemctl stop pve-firewall 2>/dev/null || true
                 systemctl disable pve-firewall 2>/dev/null || true
+                systemctl mask pve-firewall 2>/dev/null || true
                 systemctl stop proxmox-firewall 2>/dev/null || true
                 systemctl disable proxmox-firewall 2>/dev/null || true
+                systemctl mask proxmox-firewall 2>/dev/null || true
+                log_info "Proxmox firewall masked (won't re-enable on reboot)"
                 KEEP_PVE_FIREWALL=false
                 ;;
             2)
