@@ -287,8 +287,8 @@ setup_custom_dirs() {
 # IMPORTANT: If you add DNAT rules in nat.rules, you MUST add matching
 # FORWARD rules here to allow the traffic!
 #
-# Example - to allow port 443 forwarded to 192.168.1.10:
-#   -A FORWARD -i vmbr0 -o vmbr1 -p tcp -d 192.168.1.10 --dport 443 -m conntrack --ctstate NEW -j ACCEPT
+# Example - to allow port 69696 forwarded to 192.168.1.10:
+#   -A FORWARD -i vmbr0 -o vmbr1 -p tcp -d 192.168.1.10 --dport 69696 -m conntrack --ctstate NEW -j ACCEPT
 EOF
     fi
     
@@ -300,12 +300,12 @@ EOF
 # IMPORTANT: DNAT rules alone are NOT enough! You must also add a matching
 # FORWARD rule in filter.rules to allow the traffic.
 #
-# Example - to forward public port 443 to VM 192.168.1.10:
+# Example - to forward public port 69696 to VM 192.168.1.10:
 #   In this file (nat.rules):
-#     -A PREROUTING -i vmbr0 -p tcp --dport 443 -j DNAT --to-destination 192.168.1.10:443
+#     -A PREROUTING -i vmbr0 -p tcp --dport 69696 -j DNAT --to-destination 192.168.1.10:69696
 #
 #   In filter.rules:
-#     -A FORWARD -i vmbr0 -o vmbr1 -p tcp -d 192.168.1.10 --dport 443 -m conntrack --ctstate NEW -j ACCEPT
+#     -A FORWARD -i vmbr0 -o vmbr1 -p tcp -d 192.168.1.10 --dport 69696 -m conntrack --ctstate NEW -j ACCEPT
 EOF
     fi
     
