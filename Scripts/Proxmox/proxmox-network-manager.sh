@@ -141,7 +141,7 @@ try:
     net = ipaddress.ip_network('$network', strict=False)
     ip = ipaddress.ip_address('$ip')
     sys.exit(0 if ip in net else 1)
-except:
+except Exception:
     sys.exit(1)
 " 2>/dev/null
 }
@@ -154,7 +154,7 @@ import ipaddress, sys
 try:
     ipaddress.ip_interface('$ip_cidr')
     sys.exit(0)
-except:
+except Exception:
     sys.exit(1)
 " 2>/dev/null
 }
@@ -167,7 +167,7 @@ import ipaddress, sys
 try:
     ipaddress.ip_address('$ip')
     sys.exit(0)
-except:
+except Exception:
     sys.exit(1)
 " 2>/dev/null
 }
