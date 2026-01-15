@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Proxmox Private Network & Port Forwarding Manager v3
+# Proxmox Private Network & Port Forwarding Manager v3.1
 # =============================================================================
 # Manages private VM networks (NAT) and port forwarding rules on Proxmox hosts.
 #
@@ -197,13 +197,15 @@ get_bridge_network() {
     fi
 }
 
+# FIX: Corrected grep pattern - in iptables output, -s comes BEFORE -j MASQUERADE
+# Example output: -A POSTROUTING -s 192.168.1.0/24 -o vmbr0 -j MASQUERADE
 has_nat_configured() {
     local br="$1"
     local br_net=$(get_bridge_network "$br")
     
     if [[ -n "$br_net" ]]; then
-        # grep for full CIDR (e.g., 192.168.1.0/24)
-        iptables -w -t nat -S POSTROUTING 2>/dev/null | grep -q "MASQUERADE.*-s ${br_net}" && return 0
+        # Check for source network followed by MASQUERADE (correct order)
+        iptables -w -t nat -S POSTROUTING 2>/dev/null | grep -q -- "-s ${br_net}.*MASQUERADE" && return 0
     fi
     return 1
 }
@@ -227,10 +229,13 @@ get_private_bridges() {
     echo "$private_bridges" | xargs
 }
 
-# Get current DNAT rules (from iptables and custom.d)
+# FIX: Improved port forward detection with proper deduplication
+# The check now correctly matches iptables output format where --dport comes before DNAT
 get_port_forwards() {
-    # From live iptables
-    iptables -w -t nat -S PREROUTING 2>/dev/null | grep "DNAT" | while read -r rule; do
+    local live_rules=""
+    
+    # From live iptables - collect all active DNAT rules
+    while read -r rule; do
         local iface=$(echo "$rule" | grep -oP '(?<=-i )\S+')
         local proto=$(echo "$rule" | grep -oP '(?<=-p )\S+')
         local dport=$(echo "$rule" | grep -oP '(?<=--dport )\S+')
@@ -238,23 +243,25 @@ get_port_forwards() {
         
         if [[ -n "$dport" && -n "$dest" ]]; then
             echo "live:$proto:$dport->$dest"
+            live_rules="${live_rules}${proto}:${dport}:${dest}"$'\n'
         fi
-    done
+    done < <(iptables -w -t nat -S PREROUTING 2>/dev/null | grep "DNAT")
     
     # From custom.d (may not be applied yet)
     if [[ -f "$CUSTOM_DIR/nat.rules" ]]; then
-        grep -v '^\s*#' "$CUSTOM_DIR/nat.rules" 2>/dev/null | grep "DNAT" | while read -r rule; do
+        while read -r rule; do
             local proto=$(echo "$rule" | grep -oP '(?<=-p )\S+')
             local dport=$(echo "$rule" | grep -oP '(?<=--dport )\S+')
             local dest=$(echo "$rule" | grep -oP '(?<=--to-destination )\S+')
             
             if [[ -n "$dport" && -n "$dest" ]]; then
-                # Check if already in live rules
-                if ! iptables -w -t nat -S PREROUTING 2>/dev/null | grep -q "DNAT.*--dport $dport.*$dest"; then
+                local key="${proto}:${dport}:${dest}"
+                # Check if this exact combination is already in live rules
+                if ! echo "$live_rules" | grep -qF "$key"; then
                     echo "pending:$proto:$dport->$dest"
                 fi
             fi
-        done
+        done < <(grep -v '^\s*#' "$CUSTOM_DIR/nat.rules" 2>/dev/null | grep "DNAT")
     fi
 }
 
@@ -886,7 +893,7 @@ manual_persist() {
 show_menu() {
     echo ""
     echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║     Proxmox Private Network & Port Forward Manager v3          ║${NC}"
+    echo -e "${BOLD}║     Proxmox Private Network & Port Forward Manager v3.1        ║${NC}"
     echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "  1) View current status"
